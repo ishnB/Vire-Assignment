@@ -84,6 +84,7 @@ if uploaded_file is not None:
 
     st.subheader('Data with Topics and Sentiments')
     conversation_summary = conversations[['id', 'topic', 'sentiment']]
+    
     page_size = 50
     total_pages = len(conversation_summary) // page_size + (len(conversation_summary) % page_size > 0)
     page_number = st.number_input('Page number', min_value=1, max_value=total_pages, value=1)
