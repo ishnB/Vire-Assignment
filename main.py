@@ -84,7 +84,7 @@ if uploaded_file is not None:
 
     st.subheader('Data with Topics and Sentiments')
     conversation_summary = conversations[['id', 'topic', 'sentiment']]
-    
+
     page_size = 50
     total_pages = len(conversation_summary) // page_size + (len(conversation_summary) % page_size > 0)
     page_number = st.number_input('Page number', min_value=1, max_value=total_pages, value=1)
@@ -95,3 +95,7 @@ if uploaded_file is not None:
 
     st.dataframe(paginated_data)
     selected_id = st.selectbox("Select a conversation ID to view details", paginated_data['id'])
+    if selected_id:
+        selected_conversation = conversations[conversations['id'] == selected_id]
+        st.write("Selected Conversation")
+        st.write(selected_conversation[['id', 'topic', 'sentiment', 'text']].to_dict(orient='records')[0])
