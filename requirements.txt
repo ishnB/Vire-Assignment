@@ -2,6 +2,6 @@ streamlit
 pandas
 numpy
 json
-sklearn
+scikit-learn
 textblob
 joblib
