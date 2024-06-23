@@ -1,7 +1,6 @@
 streamlit
 pandas
 numpy
-json
 scikit-learn
 textblob
 joblib
