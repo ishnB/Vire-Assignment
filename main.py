@@ -46,13 +46,20 @@ if uploaded_file is not None:
         'Finance': ['finance', 'investment', 'stock', 'stock market', 'economy', 'bank', 'money', 'financial'],
         'Healthcare': ['healthcare', 'hospital', 'doctor', 'medicine', 'medical', 'clinic', 'health'],
         'Therapy': ['therapy', 'therapist', 'counseling', 'mental health', 'psychology', 'psychiatry'],
-         'Content Creation': ['content creation', 'content creator', 'content marketing', 'content strategy', 'content development','instagram', 'youtube', 'tiktok', 'social media'],
+        'Astronomy': ['astronomy', 'planet', 'galaxy', 'universe', 'cosmos', 'astronomer'],
+        'Content Creation': ['content creation', 'content creator', 'content marketing', 'content strategy', 'content development','instagram', 'youtube', 'tiktok', 'social media'],
         'Gaming': ['gaming', 'game', 'gamer', 'video game', 'esports', 'gaming industry'],
+        'Cooking': ['cooking', 'cook', 'recipe', 'baking', 'chef', 'cuisine'],
+        'Travel': ['travel', 'tourism', 'vacation', 'destination', 'trip'],
+        'Gardening': ['gardening', 'garden', 'plants', 'flowers', 'horticulture','leaves','soil'],
+        'Fitness': ['fitness', 'exercise', 'workout', 'gym', 'wellness']
     }
 
     def assign_predefined_labels(text, keywords):
+        text_lower = text.lower()
         for label, words in keywords.items():
-            if any(word in text.lower() for word in words):
+            count = sum(text_lower.count(word) for word in words)
+            if count > 2:
                 return label
         return 'Misc'
 
