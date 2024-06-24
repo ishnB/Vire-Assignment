@@ -62,7 +62,7 @@ if uploaded_file is not None:
                     'text': combined_text
                 })
         except json.JSONDecodeError as e:
-            st.error(f"Error decoding message JSON: {e}")
+            continue
 
     conversations = pd.DataFrame(extracted_data)
     
