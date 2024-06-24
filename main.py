@@ -14,19 +14,58 @@ vectorizer = joblib.load('tfidf_vectorizer.pkl')
 st.title('Conversation Topic and Sentiment Analysis')
 uploaded_file = st.file_uploader("Choose a JSON/JSONL file", type=["json", "jsonl"])
 
+def load_multiple_json_objects(file_content):
+    # Split the content by newlines
+    json_objects = file_content.splitlines()
+    
+    # Process each line as a JSON object
+    data = []
+    for obj in json_objects:
+        obj = obj.strip()  # Remove leading/trailing whitespace
+        if obj:  # Ensure there is no empty string
+            try:
+                # Parse the JSON object
+                data.append(json.loads(obj))
+            except json.JSONDecodeError as e:
+                st.error(f"Error decoding JSON: {e}")
+    return data
+
 if uploaded_file is not None:
-    file_type = uploaded_file.name.split('.')[-1]
-    if file_type == 'json':
-        data = json.load(uploaded_file)
-    else:
-        lines = uploaded_file.readlines()
-        data = [json.loads(line) for line in lines]
-    conversations = pd.DataFrame(data)
+    # file_type = uploaded_file.name.split('.')[-1]
+    # if file_type == 'json':
+    #     data = json.load(uploaded_file)
+    # else:
+    #     lines = uploaded_file.readlines()
+    #     data = [json.loads(line) for line in lines]
+    file_content = uploaded_file.read().decode('utf-8')
+    data = load_multiple_json_objects(file_content)
+
+    # Extract relevant fields from the data
+    extracted_data = []
+    for item in data:
+        try:
+            # Decode the message content string into a JSON list
+            
+            message_list = json.loads(item[0]['message'])
+            userid = item[0]['userid']
+            if message_list and isinstance(message_list, list) and len(message_list) > 0:
+                message_content = message_list[0]
+                # st.write(message_content)
+                query = message_content['query']
+                # st.write(query)
+                response = message_content['response']
+                # st.write(response)
+                combined_text = f"Query: {query} Response: {response}"
+                # st.write(combined_text)
+                extracted_data.append({
+                    'userid': userid,
+                    'text': combined_text
+                })
+        except json.JSONDecodeError as e:
+            st.error(f"Error decoding message JSON: {e}")
+
+    conversations = pd.DataFrame(extracted_data)
     
-    def extract_conversation_text(conversation):
-        return ' '.join([turn['value'] for turn in conversation])
-    
-    conversations['text'] = conversations['conversations'].apply(extract_conversation_text)
     X = vectorizer.transform(conversations['text'])
     conversations['cluster'] = kmeans.predict(X)
 
@@ -90,19 +129,20 @@ if uploaded_file is not None:
     st.table(sentiment_counts)
 
     st.subheader('Data with Topics and Sentiments')
-    conversation_summary = conversations[['id', 'topic', 'sentiment']]
+    conversation_summary = conversations[['text', 'topic', 'sentiment']]
 
+    # Pagination
     page_size = 50
     total_pages = len(conversation_summary) // page_size + (len(conversation_summary) % page_size > 0)
     page_number = st.number_input('Page number', min_value=1, max_value=total_pages, value=1)
-    
+
     start_idx = (page_number - 1) * page_size
     end_idx = start_idx + page_size
     paginated_data = conversation_summary.iloc[start_idx:end_idx]
 
     st.dataframe(paginated_data)
-    selected_id = st.selectbox("Select a conversation ID to view details", paginated_data['id'])
-    if selected_id:
-        selected_conversation = conversations[conversations['id'] == selected_id]
-        st.write("Selected Conversation")
-        st.write(selected_conversation[['id', 'topic', 'sentiment', 'text']].to_dict(orient='records')[0])
+    # selected_id = st.selectbox("Select a conversation userID to view details", paginated_data['userid'])
+    # if selected_id:
+    #     selected_conversation = conversations[conversations['userid'] == selected_id]
+    #     st.write("Selected Conversation")
+    #     st.write(selected_conversation[['userid', 'topic', 'sentiment', 'text']].to_dict(orient='records')[0])
