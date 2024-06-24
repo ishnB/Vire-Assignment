@@ -141,8 +141,8 @@ if uploaded_file is not None:
     paginated_data = conversation_summary.iloc[start_idx:end_idx]
 
     st.dataframe(paginated_data)
-    # selected_id = st.selectbox("Select a conversation userID to view details", paginated_data['userid'])
-    # if selected_id:
-    #     selected_conversation = conversations[conversations['userid'] == selected_id]
-    #     st.write("Selected Conversation")
-    #     st.write(selected_conversation[['userid', 'topic', 'sentiment', 'text']].to_dict(orient='records')[0])
+    selected_id = st.selectbox("Select a conversation userID to view details", paginated_data.index)
+    if selected_id:
+        selected_conversation = conversations[conversations.index == selected_id]
+        st.write("Selected Conversation")
+        st.write(selected_conversation[['topic', 'sentiment', 'text']].to_dict(orient='records')[0])
