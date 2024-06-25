@@ -38,7 +38,7 @@ def generate_topic_label(keywords):
     Based on the information about the topic above, please create a short label of this topic. Make sure to only return the label and nothing more.
     """
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert in generating concise and descriptive labels for topics."},
             {"role": "user", "content": prompt}
