@@ -4,4 +4,4 @@ numpy
 scikit-learn
 textblob
 joblib
-openai
+openai==0.28
