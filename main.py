@@ -1,115 +1,96 @@
 import streamlit as st
-import numpy as np
 import json
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
-from sklearn.metrics import pairwise_distances_argmin_min
 from textblob import TextBlob
-import joblib
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
-kmeans = joblib.load('kmeans_model.pkl')
-vectorizer = joblib.load('tfidf_vectorizer.pkl')
+import numpy as np
+
+# Initialize Vertex AI
+project_id = "verdant-bus-427506-v7"
+vertexai.init(project=project_id, location="us-central1")
+
+# Load the Vertex AI Generative Model
+model = GenerativeModel(model_name="gemini-1.5-flash-001")
 
 st.title('Conversation Topic and Sentiment Analysis')
 uploaded_file = st.file_uploader("Choose a JSON/JSONL file", type=["json", "jsonl"])
 
 def load_multiple_json_objects(file_content):
-    # Split the content by newlines
     json_objects = file_content.splitlines()
-    
-    # Process each line as a JSON object
     data = []
     for obj in json_objects:
-        obj = obj.strip()  # Remove leading/trailing whitespace
-        if obj:  # Ensure there is no empty string
+        obj = obj.strip()
+        if obj:
             try:
-                # Parse the JSON object
                 data.append(json.loads(obj))
             except json.JSONDecodeError as e:
                 st.error(f"Error decoding JSON: {e}")
     return data
 
+def generate_topic_label(documents, keywords):
+    prompt = f"""
+    Q:
+    I have a topic that contains the following documents:
+    {documents}
+
+    The topic is described by the following keywords: '{keywords}'.
+
+    Based on the information about the topic above, please create a short label of this topic. Make sure you to only return the label and nothing more.
+    """
+    response = model.generate_content(prompt)
+    return response.candidates[0].content.parts[0]._raw_part.text.strip()
+
+def get_top_terms_per_cluster(tfidf_matrix, labels, terms, n_terms=10):
+    df = pd.DataFrame(tfidf_matrix.todense()).groupby(labels).mean()
+    top_terms = {}
+    for i, r in df.iterrows():
+        top_terms[i] = ', '.join([terms[t] for t in np.argsort(r)[-n_terms:]])
+    return top_terms
+
 if uploaded_file is not None:
-    # file_type = uploaded_file.name.split('.')[-1]
-    # if file_type == 'json':
-    #     data = json.load(uploaded_file)
-    # else:
-    #     lines = uploaded_file.readlines()
-    #     data = [json.loads(line) for line in lines]
     file_content = uploaded_file.read().decode('utf-8')
     data = load_multiple_json_objects(file_content)
 
-    # Extract relevant fields from the data
     extracted_data = []
     for item in data:
         try:
-            # Decode the message content string into a JSON list
-            
             message_list = json.loads(item[0]['message'])
             userid = item[0]['userid']
             if message_list and isinstance(message_list, list) and len(message_list) > 0:
                 message_content = message_list[0]
-                # st.write(message_content)
                 query = message_content['query']
-                # st.write(query)
                 response = message_content['response']
-                # st.write(response)
                 combined_text = f"Query: {query} Response: {response}"
-                # st.write(combined_text)
-                extracted_data.append({
-                    'userid': userid,
-                    'text': combined_text
-                })
+                extracted_data.append({'userid': userid, 'text': combined_text})
         except json.JSONDecodeError as e:
             continue
 
     conversations = pd.DataFrame(extracted_data)
     
-    X = vectorizer.transform(conversations['text'])
-    conversations['cluster'] = kmeans.predict(X)
-
-    topic_labels = {
-        0: 'Physics and Quantum Mechanics',
-        1: 'Business and Project Management',
-        2: 'Programming and Development',
-        3: 'Mathematics and Probability',
-        4: 'General Life and Philosophy',
-        5: 'Biology and Genetics',
-        6: 'Signal Processing and Fourier Analysis',
-        7: 'Chemical Processes and Reactions',
-        8: 'Neuroscience and Physiology',
-        9: 'Algorithms and Problem Solving'
-    }
-    keywords = {
-        'Finance': ['finance', 'investment', 'stock', 'stock market', 'economy', 'bank', 'money', 'financial'],
-        'Healthcare': ['healthcare', 'hospital', 'doctor', 'medicine', 'medical', 'clinic', 'health'],
-        'Therapy': ['therapy', 'therapist', 'counseling', 'mental health', 'psychology', 'psychiatry'],
-        'Astronomy': ['astronomy', 'planet', 'galaxy', 'universe', 'cosmos', 'astronomer'],
-        'Content Creation': ['content creation', 'content creator', 'content marketing', 'content strategy', 'content development','instagram', 'youtube', 'tiktok', 'social media'],
-        'Gaming': ['gaming', 'game', 'gamer', 'video game', 'esports', 'gaming industry'],
-        'Cooking': ['cooking', 'cook', 'recipe', 'baking', 'chef', 'cuisine'],
-        'Travel': ['travel', 'tourism', 'vacation', 'destination', 'trip'],
-        'Gardening': ['gardening', 'garden', 'plants', 'flowers', 'horticulture','leaves','soil'],
-        'Fitness': ['fitness', 'exercise', 'workout', 'gym', 'wellness']
-    }
-
-    def assign_predefined_labels(text, keywords):
-        text_lower = text.lower()
-        for label, words in keywords.items():
-            count = sum(text_lower.count(word) for word in words)
-            if count > 2:
-                return label
-        return 'Misc'
-
-    conversations['topic'] = conversations['text'].apply(lambda x: assign_predefined_labels(x, keywords))
-    conversations.loc[conversations['topic'] == 'Misc', 'topic'] = conversations['cluster'].map(topic_labels)
-
-    centroids = kmeans.cluster_centers_
-    distances = pairwise_distances_argmin_min(X, centroids)[1]
-    distance_threshold = 1.0  
-    conversations.loc[distances > distance_threshold, 'topic'] = 'Misc'
-
+    # Clustering
+    vectorizer = TfidfVectorizer(stop_words='english')
+    X = vectorizer.fit_transform(conversations['text'])
+    
+    kmeans = KMeans(n_clusters=5, random_state=42)
+    conversations['cluster'] = kmeans.fit_predict(X)
+    
+    # Get top terms for each cluster
+    terms = vectorizer.get_feature_names_out()
+    top_terms_per_cluster = get_top_terms_per_cluster(X, kmeans.labels_, terms)
+    
+    # Assigning topic labels
+    cluster_groups = conversations.groupby('cluster')['text'].apply(list).reset_index()
+    cluster_groups['keywords'] = cluster_groups['cluster'].map(top_terms_per_cluster)
+    
+    cluster_groups['label'] = cluster_groups.apply(lambda row: generate_topic_label(row['text'], row['keywords']), axis=1)
+    
+    topic_mapping = cluster_groups.set_index('cluster')['label'].to_dict()
+    conversations['topic'] = conversations['cluster'].map(topic_mapping)
+    
     st.subheader('Counts of Conversations by Topic')
     topic_counts = conversations['topic'].value_counts()
     st.table(topic_counts)
@@ -131,7 +112,6 @@ if uploaded_file is not None:
     st.subheader('Data with Topics and Sentiments')
     conversation_summary = conversations[['text', 'topic', 'sentiment']]
 
-    # Pagination
     page_size = 50
     total_pages = len(conversation_summary) // page_size + (len(conversation_summary) % page_size > 0)
     page_number = st.number_input('Page number', min_value=1, max_value=total_pages, value=1)
