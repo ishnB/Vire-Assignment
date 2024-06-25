@@ -1,20 +1,18 @@
 import streamlit as st
 import json
 import pandas as pd
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from textblob import TextBlob
-import vertexai
-from vertexai.generative_models import GenerativeModel
+import openai
+import os
+from dotenv import load_dotenv
 
-import numpy as np
 
-# Initialize Vertex AI
-project_id = "verdant-bus-427506-v7"
-vertexai.init(project=project_id, location="us-central1")
+load_dotenv()
+openai.api_key = st.secrets['openai']["OPENAI_API_KEY"]
 
-# Load the Vertex AI Generative Model
-model = GenerativeModel(model_name="gemini-1.5-flash-001")
 
 st.title('Conversation Topic and Sentiment Analysis')
 uploaded_file = st.file_uploader("Choose a JSON/JSONL file", type=["json", "jsonl"])
@@ -31,18 +29,22 @@ def load_multiple_json_objects(file_content):
                 st.error(f"Error decoding JSON: {e}")
     return data
 
-def generate_topic_label(documents, keywords):
+def generate_topic_label(keywords):
     prompt = f"""
     Q:
-    I have a topic that contains the following documents:
-    {documents}
 
     The topic is described by the following keywords: '{keywords}'.
 
-    Based on the information about the topic above, please create a short label of this topic. Make sure you to only return the label and nothing more.
+    Based on the information about the topic above, please create a short label of this topic. Make sure to only return the label and nothing more.
     """
-    response = model.generate_content(prompt)
-    return response.candidates[0].content.parts[0]._raw_part.text.strip()
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are an expert in generating concise and descriptive labels for topics."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response['choices'][0]['message']['content'].strip()
 
 def get_top_terms_per_cluster(tfidf_matrix, labels, terms, n_terms=10):
     df = pd.DataFrame(tfidf_matrix.todense()).groupby(labels).mean()
@@ -75,18 +77,19 @@ if uploaded_file is not None:
     vectorizer = TfidfVectorizer(stop_words='english')
     X = vectorizer.fit_transform(conversations['text'])
     
-    kmeans = KMeans(n_clusters=5, random_state=42)
+    kmeans = KMeans(n_clusters=10, random_state=42)
     conversations['cluster'] = kmeans.fit_predict(X)
     
     # Get top terms for each cluster
     terms = vectorizer.get_feature_names_out()
     top_terms_per_cluster = get_top_terms_per_cluster(X, kmeans.labels_, terms)
     
-    # Assigning topic labels
-    cluster_groups = conversations.groupby('cluster')['text'].apply(list).reset_index()
+    cluster_groups = conversations.groupby('cluster').first().reset_index()  # Selecting first document as representative
     cluster_groups['keywords'] = cluster_groups['cluster'].map(top_terms_per_cluster)
-    
-    cluster_groups['label'] = cluster_groups.apply(lambda row: generate_topic_label(row['text'], row['keywords']), axis=1)
+    st.write(cluster_groups)
+
+    # Apply lambda function to generate topic labels
+    cluster_groups['label'] = cluster_groups.apply(lambda row: generate_topic_label(row['keywords']), axis=1)
     
     topic_mapping = cluster_groups.set_index('cluster')['label'].to_dict()
     conversations['topic'] = conversations['cluster'].map(topic_mapping)
@@ -121,8 +124,8 @@ if uploaded_file is not None:
     paginated_data = conversation_summary.iloc[start_idx:end_idx]
 
     st.dataframe(paginated_data)
-    selected_id = st.selectbox("Select a conversation userID to view details", paginated_data.index)
-    if selected_id:
-        selected_conversation = conversations[conversations.index == selected_id]
-        st.write("Selected Conversation")
-        st.write(selected_conversation[['topic', 'sentiment', 'text']].to_dict(orient='records')[0])
+    # selected_id = st.selectbox("Select a conversation userID to view details", paginated_data.index)
+    # if selected_id:
+    #     selected_conversation = conversations[conversations.index == selected_id]
+    #     st.write("Selected Conversation")
+    #     st.write(selected_conversation[['topic', 'sentiment', 'text']].to_dict(orient='records')[0])

@@ -4,4 +4,4 @@ numpy
 scikit-learn
 textblob
 joblib
-vertexai
+openai
